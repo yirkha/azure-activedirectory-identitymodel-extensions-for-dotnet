@@ -136,6 +136,11 @@ namespace Microsoft.IdentityModel.Tokens
                         if (RSA != null)
                             RSA.Dispose();
                     }
+
+
+#if NET461 || NET462 || NET472 || NETSTANDARD2_0 || NET6_0
+                    WindowsFasterRSA?.Dispose();
+#endif
                 }
             }
         }
@@ -240,6 +245,8 @@ namespace Microsoft.IdentityModel.Tokens
             SignatureFunction = SignWithRsa;
             VerifyFunction = VerifyWithRsa;
             VerifyFunctionWithLength = VerifyWithRsaWithLength;
+
+            ApplyWindowsRsaCspOptimization();
 #endif
         }
 
@@ -635,5 +642,135 @@ namespace Microsoft.IdentityModel.Tokens
 #endif
 #endregion
 
+#region Windows RSA CSP optimization
+        // Since .NET Framework 4.6, it has been possible to use the modern Windows
+        // CNG (Cryptography: Next Generation) APIs through the RsaCng class. This
+        // is the best, recommended and future-proof way to do RSA on Windows.
+        //
+        // On the native level, CNG has two sets of APIs - BCrypt* and NCrypt*. The
+        // first set simply performs low-level crypto operations on local buffers in
+        // the memory of one process. The second set is much more versatile and can
+        // handle even certificates persisted by the operating system, hardware keys
+        // etc. - but for an additional price.
+        //
+        // Unfortunately, the .NET RsaCng class always utilizes the NCrypt* functions,
+        // even when the extra features are not needed. For example, each signature
+        // verify operation means making a synchronous RPC to another protected system
+        // process "lsass", which results in extra CPU cycles, context switches,
+        // potentially user-kernel waits, thread pool congestion and other problems.
+        //
+        // The .NET implementation got changed to the lightweight BCrypt* CNG APIs
+        // in .NET 8.0, see https://github.com/dotnet/runtime/pull/76277 for details.
+        // But all runtime versions in between remain inefficient, especially under
+        // heavy load in massive-scale cloud services and similar.
+        //
+        // A potential solution is to utilize the old RSACryptoServiceProvider instead,
+        // which uses an older Windows CAPI (CryptoAPI) native functions. In practice,
+        // they just call the same CNG BCrypt* methods inside nowadays, but without the
+        // RPC overhead. The problem is that the legacy CSP/CAPI is deprecated and
+        // limited in its capabilities - PKCS1-v1.5 only, no PSS etc.
+        //
+        // As a compromise, if running on an eligible system (Windows with RsaCng) and
+        // with an eligible key (plain PKCS1), a CSP-based RSA provider is created on
+        // the side and preferably used for all operations. But if its creation fails,
+        // or one of the crypto operations later fails, we switch back to the RsaCng
+        // implementation, which is the more safe and recommended way to go.
+
+#if NET461 || NET462 || NET472 || NETSTANDARD2_0 || NET6_0
+        private RSA WindowsFasterRSA { get; set; }
+
+        void ApplyWindowsRsaCspOptimization()
+        {
+            if (RSAEncryptionPadding == RSAEncryptionPadding.Pkcs1 &&
+                RSA.GetType().FullName is "System.Security.Cryptography.RSACng"                    // .NET Framework
+                                       or "System.Security.Cryptography.RSAImplementation+RSACng"  // .NET Core, 5, 6
+                                       or "System.Security.Cryptography.RSAWrapper")               // .NET 7
+            {
+                try
+                {
+                    var parameters = RSA.ExportParameters(includePrivateParameters: true);
+                    WindowsFasterRSA = new RSACryptoServiceProvider();
+                    WindowsFasterRSA.ImportParameters(parameters);
+
+                    DecryptFunction = DecryptWithFasterRsa;
+                    EncryptFunction = EncryptWithFasterRsa;
+                    SignatureFunction = SignWithFasterRsa;
+                    VerifyFunction = VerifyWithFasterRsa;
+                    VerifyFunctionWithLength = VerifyWithFasterRsaWithLength;
+                }
+                catch (CryptographicException)
+                {
+                    WindowsFasterRSA?.Dispose();
+                    WindowsFasterRSA = null;
+                }
+            }
+        }
+
+        private byte[] DecryptWithFasterRsa(byte[] bytes)
+        {
+            try
+            {
+                return WindowsFasterRSA.Decrypt(bytes, RSAEncryptionPadding);
+            }
+            catch (CryptographicException)
+            {
+                DecryptFunction = DecryptWithRsa;
+                return RSA.Decrypt(bytes, RSAEncryptionPadding);
+            }
+        }
+
+        private byte[] EncryptWithFasterRsa(byte[] bytes)
+        {
+            try
+            {
+                return WindowsFasterRSA.Encrypt(bytes, RSAEncryptionPadding);
+            }
+            catch (CryptographicException)
+            {
+                EncryptFunction = EncryptWithRsa;
+                return RSA.Encrypt(bytes, RSAEncryptionPadding);
+            }
+        }
+
+        private byte[] SignWithFasterRsa(byte[] bytes)
+        {
+            try
+            {
+                return WindowsFasterRSA.SignHash(HashAlgorithm.ComputeHash(bytes), HashAlgorithmName, RSASignaturePadding);
+            }
+            catch (CryptographicException)
+            {
+                SignatureFunction = SignWithRsa;
+                return RSA.SignHash(HashAlgorithm.ComputeHash(bytes), HashAlgorithmName, RSASignaturePadding);
+            }
+        }
+
+        private bool VerifyWithFasterRsa(byte[] bytes, byte[] signature)
+        {
+            try
+            {
+                return WindowsFasterRSA.VerifyHash(HashAlgorithm.ComputeHash(bytes), signature, HashAlgorithmName, RSASignaturePadding);
+            }
+            catch (CryptographicException)
+            {
+                VerifyFunction = VerifyWithRsa;
+                return VerifyWithRsa(bytes, signature);
+            }
+        }
+
+        private bool VerifyWithFasterRsaWithLength(byte[] bytes, int start, int length, byte[] signature)
+        {
+            try
+            {
+                return WindowsFasterRSA.VerifyHash(HashAlgorithm.ComputeHash(bytes, start, length), signature, HashAlgorithmName, RSASignaturePadding);
+            }
+            catch (CryptographicException)
+            {
+                VerifyFunctionWithLength = VerifyWithRsaWithLength;
+                return VerifyWithRsaWithLength(bytes, start, length, signature);
+            }
+        }
+#endif
+#endregion
     }
 }

@@ -1538,7 +1538,7 @@ namespace Microsoft.IdentityModel.JsonWebTokens.Tests
                             ValidAudience = Default.Audience,
                             ValidIssuer = Default.Issuer
                         },
-                        JwtToken = ReferenceTokens.JWEDirectEcryptionWithAdditionalHeaderClaims
+                        JwtToken = ReferenceTokens.JWEDirectEncryptionWithAdditionalHeaderClaims
                     },
                     new CreateTokenTheoryData
                     {
@@ -1558,7 +1558,7 @@ namespace Microsoft.IdentityModel.JsonWebTokens.Tests
                             ValidAudience = Default.Audience,
                             ValidIssuer = Default.Issuer
                         },
-                        JwtToken = ReferenceTokens.JWEDirectEcryptionWithCtyInAdditionalHeaderClaims
+                        JwtToken = ReferenceTokens.JWEDirectEncryptionWithCtyInAdditionalHeaderClaims
                     },
                     new CreateTokenTheoryData
                     {
@@ -1578,7 +1578,7 @@ namespace Microsoft.IdentityModel.JsonWebTokens.Tests
                             ValidAudience = Default.Audience,
                             ValidIssuer = Default.Issuer
                         },
-                        JwtToken = ReferenceTokens.JWEDirectEcryptionWithDifferentTyp
+                        JwtToken = ReferenceTokens.JWEDirectEncryptionWithDifferentTyp
                     },
                     new CreateTokenTheoryData
                     {

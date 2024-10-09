@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <LangVersion>11</LangVersion>
+    <TargetFrameworks>net461;net472;net48;netcoreapp3.1;net5.0;net6.0;net7.0;net8.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" Version="0.13.5" />
+  </ItemGroup>
+
+  <!-- - - - -->
+  
+  <PropertyGroup>
+    <UseLocalBuild>false</UseLocalBuild>
+  </PropertyGroup>
+
+  <ItemGroup Condition="!$(UseLocalBuild)">
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="6.32.0" />
+  </ItemGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net461'">
+    <LocalBuildTargetFramework>net461</LocalBuildTargetFramework>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net472' Or '$(TargetFramework)' == 'net48'">
+    <LocalBuildTargetFramework>net472</LocalBuildTargetFramework>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'netcoreapp4.1' Or '$(TargetFramework)' == 'net5.0'">
+    <LocalBuildTargetFramework>netstandard2.0</LocalBuildTargetFramework>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net6.0' Or '$(TargetFramework)' == 'net7.0' Or '$(TargetFramework)' == 'net8.0'">
+    <LocalBuildTargetFramework>net6.0</LocalBuildTargetFramework>
+  </PropertyGroup>
+  <ItemGroup Condition="$(UseLocalBuild)">
+    <Reference Include="..\..\..\..\src\Microsoft.IdentityModel.Abstractions\bin\$(Configuration)\$(TargetFramework)\Microsoft.IdentityModel.Abstractions.dll" />
+    <Reference Include="..\..\..\..\src\Microsoft.IdentityModel.Logging\bin\$(Configuration)\$(TargetFramework)\Microsoft.IdentityModel.Logging.dll" />
+    <Reference Include="..\..\..\..\src\Microsoft.IdentityModel.JsonWebTokens\bin\$(Configuration)\$(TargetFramework)\Microsoft.IdentityModel.JsonWebTokens.dll" />
+    <Reference Include="..\..\..\..\src\Microsoft.IdentityModel.Tokens\bin\$(Configuration)\$(TargetFramework)\Microsoft.IdentityModel.Tokens.dll" />
+  </ItemGroup>
+
+</Project>
